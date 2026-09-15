@@ -6,6 +6,7 @@ signal ops_changed(value: float)
 signal upgrade_owned(upgrade_id: String, owned: int)
 signal generators_changed(count: int)
 signal dimension_complete
+signal dimension_changed(dim_index: int)
 
 const COST_MULT := 1.15
 const GENERATORS_GOAL := 12
@@ -61,6 +62,11 @@ func _init_upgrades() -> void:
 			"owned": 0,
 		},
 	]
+
+
+func get_dimension_index() -> int:
+	## 0=oficina, 1=agua, 2=vaporwave (cicla).
+	return dimensiones_completadas % 3
 
 
 func get_total_generators() -> int:
@@ -144,3 +150,4 @@ func soft_reset() -> void:
 	generators_changed.emit(0)
 	for u in upgrades:
 		upgrade_owned.emit(u["id"], 0)
+	dimension_changed.emit(get_dimension_index())

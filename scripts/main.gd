@@ -29,6 +29,37 @@ const UPGRADE_TEXTURES := {
 const INTRO_BG := "res://assets/ui/intro_panel_frutiger.png"
 const ENDING_BG := "res://assets/ui/ending_panel_melancholic.png"
 
+## Packs de entorno por dimensión (Jean).
+const ENV_PACKS := [
+	{
+		"floor": "res://assets/env/floor_dim1_tiles.png",
+		"bg": "res://assets/env/bg_dim1_corridor.png",
+		"ambient": Color(0.72, 0.78, 0.86),
+		"bg_color": Color(0.42, 0.48, 0.55),
+		"light": Color(0.90, 0.94, 1.0),
+		"light_energy": 1.05,
+		"uv_scale": Vector3(10, 10, 10),
+	},
+	{
+		"floor": "res://assets/env/floor_dim2_water.png",
+		"bg": "res://assets/env/bg_dim2_aqua.png",
+		"ambient": Color(0.55, 0.82, 0.88),
+		"bg_color": Color(0.25, 0.55, 0.62),
+		"light": Color(0.75, 0.95, 1.0),
+		"light_energy": 1.15,
+		"uv_scale": Vector3(6, 6, 6),
+	},
+	{
+		"floor": "res://assets/env/floor_dim3_vapor.png",
+		"bg": "res://assets/env/bg_dim3_vaporwave.png",
+		"ambient": Color(0.92, 0.70, 0.82),
+		"bg_color": Color(0.55, 0.35, 0.55),
+		"light": Color(1.0, 0.85, 0.75),
+		"light_energy": 1.2,
+		"uv_scale": Vector3(8, 8, 8),
+	},
+]
+
 var _next_slot: int = 0
 var _button_by_id: Dictionary = {}
 var _objective_label: Label
@@ -36,6 +67,12 @@ var _intro_layer: CanvasLayer
 var _ending_layer: CanvasLayer
 var _gameplay_started: bool = false
 var _ending_dismissed: bool = false
+var _floor_mesh: MeshInstance3D
+var _world_env: WorldEnvironment
+var _dir_light: DirectionalLight3D
+var _backdrop: MeshInstance3D
+var _floor_mat: StandardMaterial3D
+var _backdrop_mat: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -44,11 +81,14 @@ func _ready() -> void:
 	GameState.upgrade_owned.connect(_on_upgrade_owned)
 	GameState.generators_changed.connect(_on_generators_changed)
 	GameState.dimension_complete.connect(_on_dimension_complete)
+	GameState.dimension_changed.connect(_on_dimension_changed)
 	_build_buy_buttons()
 	_ensure_click_button()
 	_ensure_objective_label()
 	_build_intro_overlay()
 	_build_ending_overlay()
+	_setup_environment_nodes()
+	_apply_dimension_environment(GameState.get_dimension_index())
 	_refresh_ui()
 	_on_generators_changed(GameState.get_total_generators())
 	if vinyl:
@@ -60,6 +100,56 @@ func _ready() -> void:
 		elif vinyl.has_signal("input_event"):
 			vinyl.input_event.connect(_on_vinyl_input)
 	_show_intro()
+
+
+
+func _on_dimension_changed(dim_index: int) -> void:
+	_apply_dimension_environment(dim_index)
+
+
+func _setup_environment_nodes() -> void:
+	_floor_mesh = get_node_or_null("Floor") as MeshInstance3D
+	_world_env = get_node_or_null("WorldEnvironment") as WorldEnvironment
+	_dir_light = get_node_or_null("DirectionalLight3D") as DirectionalLight3D
+	if _floor_mesh:
+		_floor_mat = StandardMaterial3D.new()
+		_floor_mat.roughness = 0.75
+		_floor_mat.metallic = 0.05
+		_floor_mesh.set_surface_override_material(0, _floor_mat)
+	_backdrop = get_node_or_null("Backdrop") as MeshInstance3D
+	if _backdrop == null:
+		_backdrop = MeshInstance3D.new()
+		_backdrop.name = "Backdrop"
+		var quad := QuadMesh.new()
+		quad.size = Vector2(40, 22)
+		_backdrop.mesh = quad
+		_backdrop.position = Vector3(0, 8, -12)
+		add_child(_backdrop)
+	_backdrop_mat = StandardMaterial3D.new()
+	_backdrop_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_backdrop_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	_backdrop.set_surface_override_material(0, _backdrop_mat)
+
+
+func _apply_dimension_environment(dim_index: int) -> void:
+	var pack: Dictionary = ENV_PACKS[dim_index % ENV_PACKS.size()]
+	var floor_tex := load(pack["floor"]) as Texture2D
+	var bg_tex := load(pack["bg"]) as Texture2D
+	if _floor_mat and floor_tex:
+		_floor_mat.albedo_texture = floor_tex
+		_floor_mat.uv1_scale = pack["uv_scale"]
+	if _backdrop_mat and bg_tex:
+		_backdrop_mat.albedo_texture = bg_tex
+	if _world_env and _world_env.environment:
+		var env := _world_env.environment
+		env.background_mode = Environment.BG_COLOR
+		env.background_color = pack["bg_color"]
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = pack["ambient"]
+		env.ambient_light_energy = 0.95
+	if _dir_light:
+		_dir_light.light_color = pack["light"]
+		_dir_light.light_energy = pack["light_energy"]
 
 
 func _ensure_click_button() -> void:
