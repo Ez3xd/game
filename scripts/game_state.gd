@@ -4,16 +4,23 @@ extends Node
 signal ondas_changed(value: float)
 signal ops_changed(value: float)
 signal upgrade_owned(upgrade_id: String, owned: int)
+signal generators_changed(count: int)
+signal dimension_complete
 
 const COST_MULT := 1.15
+const GENERATORS_GOAL := 12
+const PRESTIGE_STEP := 1.5
 
 ## Generadores / upgrades disponibles.
 var upgrades: Array[Dictionary] = []
 
 var ondas_actuales: float = 0.0
 var ondas_por_segundo: float = 0.0
+var dimensiones_completadas: int = 0
+var prestige_mult: float = 1.0
 
 var _passive_timer: Timer
+var _dimension_cleared: bool = false
 
 
 func _ready() -> void:
@@ -56,15 +63,22 @@ func _init_upgrades() -> void:
 	]
 
 
+func get_total_generators() -> int:
+	var total := 0
+	for u in upgrades:
+		total += int(u["owned"])
+	return total
+
+
 func add_click(amount: float = 1.0) -> void:
-	ondas_actuales += amount
+	ondas_actuales += amount * prestige_mult
 	ondas_changed.emit(ondas_actuales)
 
 
 func _on_passive_tick() -> void:
 	if ondas_por_segundo <= 0.0:
 		return
-	ondas_actuales += ondas_por_segundo
+	ondas_actuales += ondas_por_segundo * prestige_mult
 	ondas_changed.emit(ondas_actuales)
 
 
@@ -100,6 +114,11 @@ func buy(upgrade_id: String) -> bool:
 	_recalc_ops()
 	ondas_changed.emit(ondas_actuales)
 	upgrade_owned.emit(upgrade_id, int(u["owned"]))
+	var total := get_total_generators()
+	generators_changed.emit(total)
+	if total >= GENERATORS_GOAL and not _dimension_cleared:
+		_dimension_cleared = true
+		dimension_complete.emit()
 	return true
 
 
@@ -109,3 +128,19 @@ func _recalc_ops() -> void:
 		total += float(u["ondas_per_second"]) * float(u["owned"])
 	ondas_por_segundo = total
 	ops_changed.emit(ondas_por_segundo)
+
+
+## Soft reset: sube prestigio, reinicia progreso de la dimensión actual.
+func soft_reset() -> void:
+	dimensiones_completadas += 1
+	prestige_mult *= PRESTIGE_STEP
+	ondas_actuales = 0.0
+	ondas_por_segundo = 0.0
+	_dimension_cleared = false
+	for u in upgrades:
+		u["owned"] = 0
+	_recalc_ops()
+	ondas_changed.emit(ondas_actuales)
+	generators_changed.emit(0)
+	for u in upgrades:
+		upgrade_owned.emit(u["id"], 0)
