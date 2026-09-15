@@ -34,29 +34,35 @@ const ENV_PACKS := [
 	{
 		"floor": "res://assets/env/floor_dim1_tiles.png",
 		"bg": "res://assets/env/bg_dim1_corridor.png",
-		"ambient": Color(0.72, 0.78, 0.86),
-		"bg_color": Color(0.42, 0.48, 0.55),
-		"light": Color(0.90, 0.94, 1.0),
-		"light_energy": 1.05,
-		"uv_scale": Vector3(10, 10, 10),
+		"ambient": Color(0.45, 0.52, 0.60),
+		"bg_color": Color(0.28, 0.34, 0.40),
+		"light": Color(0.85, 0.90, 0.95),
+		"light_energy": 0.55,
+		"uv_scale": Vector3(6, 6, 6),
+		"floor_tint": Color(0.75, 0.78, 0.82),
+		"bg_tint": Color(0.85, 0.88, 0.92),
 	},
 	{
 		"floor": "res://assets/env/floor_dim2_water.png",
 		"bg": "res://assets/env/bg_dim2_aqua.png",
-		"ambient": Color(0.55, 0.82, 0.88),
-		"bg_color": Color(0.25, 0.55, 0.62),
-		"light": Color(0.75, 0.95, 1.0),
-		"light_energy": 1.15,
-		"uv_scale": Vector3(6, 6, 6),
+		"ambient": Color(0.30, 0.55, 0.62),
+		"bg_color": Color(0.12, 0.35, 0.42),
+		"light": Color(0.65, 0.90, 0.95),
+		"light_energy": 0.65,
+		"uv_scale": Vector3(5, 5, 5),
+		"floor_tint": Color(0.70, 0.85, 0.90),
+		"bg_tint": Color(0.80, 0.92, 0.95),
 	},
 	{
 		"floor": "res://assets/env/floor_dim3_vapor.png",
 		"bg": "res://assets/env/bg_dim3_vaporwave.png",
-		"ambient": Color(0.92, 0.70, 0.82),
-		"bg_color": Color(0.55, 0.35, 0.55),
-		"light": Color(1.0, 0.85, 0.75),
-		"light_energy": 1.2,
-		"uv_scale": Vector3(8, 8, 8),
+		"ambient": Color(0.55, 0.35, 0.50),
+		"bg_color": Color(0.35, 0.18, 0.35),
+		"light": Color(1.0, 0.75, 0.65),
+		"light_energy": 0.7,
+		"uv_scale": Vector3(5, 5, 5),
+		"floor_tint": Color(0.90, 0.70, 0.80),
+		"bg_tint": Color(0.95, 0.80, 0.90),
 	},
 ]
 
@@ -111,45 +117,89 @@ func _setup_environment_nodes() -> void:
 	_floor_mesh = get_node_or_null("Floor") as MeshInstance3D
 	_world_env = get_node_or_null("WorldEnvironment") as WorldEnvironment
 	_dir_light = get_node_or_null("DirectionalLight3D") as DirectionalLight3D
+
+	# Suelo: material mate para que no se queme con la luz.
 	if _floor_mesh:
 		_floor_mat = StandardMaterial3D.new()
-		_floor_mat.roughness = 0.75
-		_floor_mat.metallic = 0.05
+		_floor_mat.roughness = 1.0
+		_floor_mat.metallic = 0.0
+		_floor_mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 		_floor_mesh.set_surface_override_material(0, _floor_mat)
+
+	# Backdrop como pared/horizonte (no llenar toda la cámara con la niebla blanca).
 	_backdrop = get_node_or_null("Backdrop") as MeshInstance3D
 	if _backdrop == null:
 		_backdrop = MeshInstance3D.new()
 		_backdrop.name = "Backdrop"
 		var quad := QuadMesh.new()
-		quad.size = Vector2(40, 22)
+		quad.size = Vector2(48, 16)
 		_backdrop.mesh = quad
-		_backdrop.position = Vector3(0, 8, -12)
 		add_child(_backdrop)
+	_backdrop.position = Vector3(0, 7.5, -14)
+	_backdrop.rotation_degrees = Vector3(0, 0, 0)
+
 	_backdrop_mat = StandardMaterial3D.new()
 	_backdrop_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_backdrop_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	_backdrop_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_backdrop.set_surface_override_material(0, _backdrop_mat)
+
+	# Cámara un poco más alta / menos picada para ver el suelo texturizado.
+	var cam := get_node_or_null("Camera3D") as Camera3D
+	if cam:
+		cam.position = Vector3(0, 5.2, 9.5)
+		cam.rotation_degrees = Vector3(-28, 0, 0)
+		cam.fov = 60.0
+
+	_style_hud_labels()
+
+
+func _style_hud_labels() -> void:
+	# Sobre fondos claros, el Label default (casi blanco) desaparece.
+	var dark := Color(0.08, 0.10, 0.14)
+	for n in ["OndasLabel", "OpsLabel", "HintLabel", "ObjectiveLabel"]:
+		var lab := get_node_or_null("%" + n) as Label
+		if lab == null:
+			lab = get_node_or_null("UI/Root/TopBar/" + n) as Label
+		if lab:
+			lab.add_theme_color_override("font_color", dark)
+			lab.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.65))
+			lab.add_theme_constant_override("outline_size", 4)
 
 
 func _apply_dimension_environment(dim_index: int) -> void:
 	var pack: Dictionary = ENV_PACKS[dim_index % ENV_PACKS.size()]
-	var floor_tex := load(pack["floor"]) as Texture2D
-	var bg_tex := load(pack["bg"]) as Texture2D
-	if _floor_mat and floor_tex:
-		_floor_mat.albedo_texture = floor_tex
+	var floor_tex := load(str(pack["floor"])) as Texture2D
+	var bg_tex := load(str(pack["bg"])) as Texture2D
+
+	if _floor_mat:
+		if floor_tex:
+			_floor_mat.albedo_texture = floor_tex
+		_floor_mat.albedo_color = pack["floor_tint"]
 		_floor_mat.uv1_scale = pack["uv_scale"]
-	if _backdrop_mat and bg_tex:
-		_backdrop_mat.albedo_texture = bg_tex
+
+	if _backdrop_mat:
+		if bg_tex:
+			_backdrop_mat.albedo_texture = bg_tex
+		_backdrop_mat.albedo_color = pack["bg_tint"]
+
 	if _world_env and _world_env.environment:
 		var env := _world_env.environment
-		env.background_mode = Environment.BG_COLOR
-		env.background_color = pack["bg_color"]
-		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.ambient_light_color = pack["ambient"]
-		env.ambient_light_energy = 0.95
+		# Duplicar para no mutar el SubResource compartido de forma rara.
+		var env2 := env.duplicate() as Environment
+		env2.background_mode = Environment.BG_COLOR
+		env2.background_color = pack["bg_color"]
+		env2.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env2.ambient_light_color = pack["ambient"]
+		env2.ambient_light_energy = 0.55
+		env2.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+		env2.tonemap_exposure = 0.85
+		_world_env.environment = env2
+
 	if _dir_light:
 		_dir_light.light_color = pack["light"]
-		_dir_light.light_energy = pack["light_energy"]
+		_dir_light.light_energy = float(pack["light_energy"])
+		_dir_light.shadow_enabled = true
 
 
 func _ensure_click_button() -> void:
@@ -183,6 +233,9 @@ func _ensure_objective_label() -> void:
 		_objective_label = Label.new()
 		_objective_label.name = "ObjectiveLabel"
 		_objective_label.add_theme_font_size_override("font_size", 16)
+		_objective_label.add_theme_color_override("font_color", Color(0.08, 0.10, 0.14))
+		_objective_label.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.65))
+		_objective_label.add_theme_constant_override("outline_size", 4)
 		top.add_child(_objective_label)
 
 
